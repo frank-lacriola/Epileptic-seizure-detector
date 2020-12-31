@@ -114,11 +114,7 @@ public class EpSAutoencoder {
         }
 
         //Evaluation of the model
-        DataSetIterator iterator = new Data
-        for(INDArray data2 : featuresTest){
 
-            RegressionEvaluation eval = net.evaluateRegression( );
-            System.out.println(eval.stats());
         }
 
 
