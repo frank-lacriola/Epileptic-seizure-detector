@@ -1,5 +1,6 @@
 package EpSAutoencoder;
 
+import com.google.flatbuffers.FlatBufferBuilder;
 import org.datavec.api.records.reader.RecordReader;
 import org.datavec.api.records.reader.impl.csv.CSVRecordReader;
 import org.datavec.api.records.reader.impl.transform.TransformProcessRecordReader;
@@ -20,19 +21,29 @@ import org.deeplearning4j.nn.weights.WeightInit;
 import org.deeplearning4j.optimize.listeners.ScoreIterationListener;
 import org.nd4j.common.io.ClassPathResource;
 import org.nd4j.linalg.activations.Activation;
+import org.nd4j.linalg.api.blas.params.MMulTranspose;
+import org.nd4j.linalg.api.buffer.DataBuffer;
+import org.nd4j.linalg.api.buffer.DataType;
 import org.nd4j.linalg.api.ndarray.INDArray;
+import org.nd4j.linalg.api.shape.LongShapeDescriptor;
+import org.nd4j.linalg.cpu.nativecpu.NDArray;
 import org.nd4j.linalg.dataset.DataSet;
 import org.nd4j.linalg.dataset.SplitTestAndTrain;
 import org.nd4j.linalg.dataset.api.MultiDataSet;
 import org.nd4j.linalg.dataset.api.iterator.DataSetIterator;
 import org.nd4j.linalg.dataset.api.preprocessor.NormalizerMinMaxScaler;
+import org.nd4j.linalg.exception.Nd4jNoSuchWorkspaceException;
 import org.nd4j.linalg.factory.Nd4j;
+import org.nd4j.linalg.indexing.INDArrayIndex;
+import org.nd4j.linalg.indexing.conditions.Condition;
 import org.nd4j.linalg.learning.config.AdaGrad;
 import org.nd4j.linalg.lossfunctions.LossFunctions;
+import org.nd4j.linalg.string.NDArrayStrings;
 import org.nd4j.shade.protobuf.compiler.PluginProtos;
 
 import java.io.File;
 import java.io.IOException;
+import java.nio.LongBuffer;
 import java.util.*;
 
 public class EpSAutoencoder {
@@ -70,7 +81,7 @@ public class EpSAutoencoder {
             .build();
 
         TransformProcess transformProcess = new TransformProcess.Builder(schema)
-            .integerMathOp("int_179", MathOp.Subtract,1)
+            .integerMathOp("int_179", MathOp.Subtract, 1)
             .removeColumns("first").build();
 
         RecordReader recordReader = new CSVRecordReader(1, ',');
@@ -88,25 +99,38 @@ public class EpSAutoencoder {
 
         //Normalizing each batch
         NormalizerMinMaxScaler n = new NormalizerMinMaxScaler(-1, 1);
-        DataSetIterator iter = new RecordReaderDataSetIterator(transformProcessRecordReader, 100,178,5);
+        DataSetIterator iter = new RecordReaderDataSetIterator(transformProcessRecordReader, 100, 178, 5);
         n.fit(iter);
         iter.setPreProcessor(n);
 
 
         List<INDArray> featuresTrain = new ArrayList<>();
         List<INDArray> featuresTest = new ArrayList<>();
-        List<INDArray> labelsTest = new ArrayList<>();
+        List<INDArray> normLabelsTest = new ArrayList<>();
         DataSet dsTest = null;
 
 
         Random r = new Random(12345);
         while (iter.hasNext()) {
+
             org.nd4j.linalg.dataset.DataSet ds = iter.next();
             SplitTestAndTrain split = ds.splitTestAndTrain(80, r);  //80/20 split (from miniBatch = 100)
             featuresTrain.add(split.getTrain().getFeatures());
             dsTest = split.getTest();
             featuresTest.add(dsTest.getFeatures());
-            labelsTest.add(ds.getLabels());
+            normLabelsTest.add(ds.getLabels());
+        }
+
+
+        //Creazione vettore per labels
+        List<NDArray> labels = new ArrayList<>();
+        NDArray batchLabArray = new NDArray();
+        batchLabArray.setShapeAndStride();
+        for (int i = 0; i < normLabelsTest.size(); i++) {
+            for (int j = 0; j < 100; j++) {
+                batchLabArray.add(Nd4j.argMax((normLabelsTest.get(i)).getRow(j)));  //Reverse one-hot-repr. transformation to get the real label
+            }
+            labels.add(batchLabArray);
         }
 
         //Training the model:
@@ -120,7 +144,6 @@ public class EpSAutoencoder {
         }
 
 
-
         System.out.println(net.summary());
 
         //Layer reduction and new DataSet after features reduction
@@ -132,28 +155,29 @@ public class EpSAutoencoder {
 
 
         List<INDArray> reducedFeatures = new ArrayList<>();
-        List<INDArray> newLabels =new ArrayList<>();
+        List<INDArray> newLabels = new ArrayList<>();
         List<INDArray> newInputs = new ArrayList<>();
+
         //CSVRecordWriter recordWriter = new CSVRecordWriter();
         // recordWriter.iniz
 
 
-        while (iter.hasNext()){
+        while (iter.hasNext()) {
             org.nd4j.linalg.dataset.DataSet ds = iter.next();
             reducedFeatures.add(ds.getFeatures());
             newLabels.add(ds.getLabels());
         }
 
-        for (INDArray redData : reducedFeatures){
+        for (INDArray redData : reducedFeatures) {
             newInputs = redNet.feedForward(redData);
         }
 
         Iterator inputsIter = newInputs.iterator();
         Iterator labelsIter = newLabels.iterator();
 
-      //  while (outputIter.hasNext()){
+        //  while (outputIter.hasNext()){
         //    recordWriter.write(outputIter.next().toString());
-        }
+        //}
 
         //Inizializing classifier
         MultiLayerConfiguration classifierConfig = new NeuralNetConfiguration.Builder()
@@ -177,7 +201,7 @@ public class EpSAutoencoder {
 
         MultiLayerNetwork classifier = new MultiLayerNetwork(classifierConfig);
 
-        int nEpochs2=30;
+        int nEpochs2 = 30;
 
       /*  for (int j=0; j< nEpochs2; j++){
             while(inputsIter.hasNext() && labelsIter.hasNext()){
@@ -189,9 +213,8 @@ public class EpSAutoencoder {
 */
 
 
-
-
     }
+}
 
 
 
