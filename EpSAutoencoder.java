@@ -11,6 +11,7 @@ import org.datavec.api.split.partition.NumberOfRecordsPartitioner;
 import org.datavec.api.transform.MathOp;
 import org.datavec.api.transform.TransformProcess;
 import org.datavec.api.transform.schema.Schema;
+import org.datavec.api.writable.Text;
 import org.datavec.api.writable.Writable;
 import org.deeplearning4j.datasets.datavec.RecordReaderDataSetIterator;
 import org.deeplearning4j.datasets.iterator.INDArrayDataSetIterator;
@@ -134,7 +135,7 @@ public class EpSAutoencoder {
                 batchLabArray.add(Nd4j.argMax((normLabelsTest.get(i)).getRow(j)));  //Reverse one-hot-repr. transformation to get the real label
             }
             labels.add(batchLabArray);
-        }  
+        }
 
         //Training the model:
         int nEpochs1 = 15;
@@ -149,17 +150,6 @@ public class EpSAutoencoder {
 
         System.out.println(net.summary());
 
-        //Layer reduction and new DataSet after features reduction
-        MultiLayerNetwork redNet = new TransferLearning.Builder(net)
-            .removeLayersFromOutput(2)
-            .setFeatureExtractor(1)
-            .build();
-        System.out.println(redNet.summary());
-
-
-        List<INDArray> reducedFeatures = new ArrayList<>();
-        List<INDArray> newLabels = new ArrayList<>();
-        List<INDArray> newInputs = new ArrayList<>();
 
         //Initializing RecordWriter to create a CSV with new input files
         List<Writable> writingList = new ArrayList<>();
@@ -177,22 +167,40 @@ public class EpSAutoencoder {
             e.printStackTrace();
         }
 
+
+        //Layer reduction and new DataSet after features reduction
+        MultiLayerNetwork redNet = new TransferLearning.Builder(net)
+            .removeLayersFromOutput(2)
+            .setFeatureExtractor(1)
+            .build();
+        System.out.println(redNet.summary());
+
+
+        List<INDArray> features = new ArrayList<>();
+        List<INDArray> newLabels = new ArrayList<>();
+        List<INDArray> newInputs = new ArrayList<>();
+
+
+
         while (iter.hasNext()) {
             org.nd4j.linalg.dataset.DataSet ds = iter.next();
-            reducedFeatures.add(ds.getFeatures());
+            features.add(ds.getFeatures());
             newLabels.add(ds.getLabels());
         }
 
-        for (INDArray redData : reducedFeatures) {
+
+
+        for (INDArray redData : features) {
             newInputs = redNet.feedForward(redData);
         }
 
         Iterator inputsIter = newInputs.iterator();
-        Iterator labelsIter = newLabels.iterator();
+        Iterator labelsIter = labels.iterator();
 
-        //  while (outputIter.hasNext()){
-        //  recordWriter.write(outputIter.next().toString());
-        //}
+          while (inputsIter.hasNext() && labelsIter.hasNext() ){
+              writingList.add(new Text(inputsIter.next().toString() +""))
+              recordWriter.write();
+        }
 
         //Inizializing classifier
         MultiLayerConfiguration classifierConfig = new NeuralNetConfiguration.Builder()
@@ -216,7 +224,9 @@ public class EpSAutoencoder {
 
         MultiLayerNetwork classifier = new MultiLayerNetwork(classifierConfig);
 
-        int nEpochs2 = 30;
+
+
+        //int nEpochs2 = 30;
 
       /*  for (int j=0; j< nEpochs2; j++){
             while(inputsIter.hasNext() && labelsIter.hasNext()){
