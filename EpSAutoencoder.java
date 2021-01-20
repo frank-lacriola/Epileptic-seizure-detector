@@ -6,9 +6,12 @@ import org.datavec.api.records.reader.impl.csv.CSVRecordReader;
 import org.datavec.api.records.reader.impl.transform.TransformProcessRecordReader;
 import org.datavec.api.records.writer.impl.csv.CSVRecordWriter;
 import org.datavec.api.split.FileSplit;
+import org.datavec.api.split.InputSplit;
+import org.datavec.api.split.partition.NumberOfRecordsPartitioner;
 import org.datavec.api.transform.MathOp;
 import org.datavec.api.transform.TransformProcess;
 import org.datavec.api.transform.schema.Schema;
+import org.datavec.api.writable.Writable;
 import org.deeplearning4j.datasets.datavec.RecordReaderDataSetIterator;
 import org.deeplearning4j.datasets.iterator.INDArrayDataSetIterator;
 import org.deeplearning4j.nn.conf.MultiLayerConfiguration;
@@ -48,7 +51,7 @@ import java.util.*;
 
 public class EpSAutoencoder {
 
-    public static void main(String[] args) {
+    public static void main(String[] args) throws IOException {
 
 
         MultiLayerConfiguration conf = new NeuralNetConfiguration.Builder()
@@ -131,7 +134,7 @@ public class EpSAutoencoder {
                 batchLabArray.add(Nd4j.argMax((normLabelsTest.get(i)).getRow(j)));  //Reverse one-hot-repr. transformation to get the real label
             }
             labels.add(batchLabArray);
-        }
+        }  
 
         //Training the model:
         int nEpochs1 = 15;
@@ -158,9 +161,21 @@ public class EpSAutoencoder {
         List<INDArray> newLabels = new ArrayList<>();
         List<INDArray> newInputs = new ArrayList<>();
 
-        //CSVRecordWriter recordWriter = new CSVRecordWriter();
-        // recordWriter.iniz
+        //Initializing RecordWriter to create a CSV with new input files
+        List<Writable> writingList = new ArrayList<>();
+        File tempFile = File.createTempFile("writeOn", "csv");
+        FileSplit fileSplit = new FileSplit(tempFile);
+        CSVRecordWriter recordWriter = new CSVRecordWriter();
 
+        try {
+            recordWriter.initialize(fileSplit , new NumberOfRecordsPartitioner());
+        } catch (IOException e) {
+            e.printStackTrace();
+        } catch (InterruptedException e) {
+            e.printStackTrace();
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
 
         while (iter.hasNext()) {
             org.nd4j.linalg.dataset.DataSet ds = iter.next();
@@ -176,7 +191,7 @@ public class EpSAutoencoder {
         Iterator labelsIter = newLabels.iterator();
 
         //  while (outputIter.hasNext()){
-        //    recordWriter.write(outputIter.next().toString());
+        //  recordWriter.write(outputIter.next().toString());
         //}
 
         //Inizializing classifier
