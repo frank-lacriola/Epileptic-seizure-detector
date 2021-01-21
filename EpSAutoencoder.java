@@ -62,13 +62,13 @@ public class EpSAutoencoder {
             .activation(Activation.TANH)
             .l2(0.0001)
             .list()
-            .layer(new DenseLayer.Builder().nIn(179).nOut(100)
+            .layer(new DenseLayer.Builder().nIn(178).nOut(100)
                 .build())
             .layer(new DenseLayer.Builder().nIn(100).nOut(64)
                 .build())
             .layer(new DenseLayer.Builder().nIn(64).nOut(100)
                 .build())
-            .layer(new OutputLayer.Builder().nIn(100).nOut(179)
+            .layer(new OutputLayer.Builder().nIn(100).nOut(178)
                 .activation(Activation.TANH)
                 .lossFunction(LossFunctions.LossFunction.MSE)
                 .build())
@@ -101,9 +101,11 @@ public class EpSAutoencoder {
         //Passing transformation process to convert the csv file
         RecordReader transformProcessRecordReader = new TransformProcessRecordReader(recordReader, transformProcess);
 
+        int batchSize= 100;
+
         //Normalizing each batch
         NormalizerMinMaxScaler n = new NormalizerMinMaxScaler(-1, 1);
-        DataSetIterator iter = new RecordReaderDataSetIterator(transformProcessRecordReader, 100, 178, 5);
+        DataSetIterator iter = new RecordReaderDataSetIterator(transformProcessRecordReader, batchSize, 178, 5);
         n.fit(iter);
         iter.setPreProcessor(n);
 
@@ -125,19 +127,19 @@ public class EpSAutoencoder {
             normLabelsTest.add(ds.getLabels());
         }
 
-
+/*
         //Creazione vettore per labels
         List<NDArray> labels = new ArrayList<>();
         NDArray batchLabArray = new NDArray();
         batchLabArray.setShapeAndStride();
         for (int i = 0; i < normLabelsTest.size(); i++) {
-            for (int j = 0; j < 100; j++) {
+            for (int j = 0; j < batchSize; j++) {
                 batchLabArray.add(Nd4j.argMax((normLabelsTest.get(i)).getRow(j)));  //Reverse one-hot-repr. transformation to get the real label
             }
             labels.add(batchLabArray);
         }
-
-        //Training the model:
+*/
+        //Training of the model:
         int nEpochs1 = 15;
         for (int epoch = 0; epoch < nEpochs1; epoch++) {
             for (INDArray data : featuresTrain) {
@@ -153,7 +155,7 @@ public class EpSAutoencoder {
 
         //Initializing RecordWriter to create a CSV with new input files
         List<Writable> writingList = new ArrayList<>();
-        File tempFile = File.createTempFile("writeOn", "csv");
+        File tempFile = File.createTempFile("writeOn", ".csv");
         FileSplit fileSplit = new FileSplit(tempFile);
         CSVRecordWriter recordWriter = new CSVRecordWriter();
 
@@ -176,31 +178,36 @@ public class EpSAutoencoder {
         System.out.println(redNet.summary());
 
 
-        List<INDArray> features = new ArrayList<>();
-        List<INDArray> newLabels = new ArrayList<>();
+     //   List<INDArray> features = new ArrayList<>();
+     //   List<INDArray> newLabels = new ArrayList<>();
         List<INDArray> newInputs = new ArrayList<>();
 
 
 
-        while (iter.hasNext()) {
-            org.nd4j.linalg.dataset.DataSet ds = iter.next();
+/*
+        while (iter2.hasNext()) {
+            org.nd4j.linalg.dataset.DataSet ds = iter2.next();
             features.add(ds.getFeatures());
             newLabels.add(ds.getLabels());
         }
 
+*/
 
-
-        for (INDArray redData : features) {
+        for (INDArray redData : featuresTest) {
             newInputs = redNet.feedForward(redData);
         }
 
-        Iterator inputsIter = newInputs.iterator();
-        Iterator labelsIter = labels.iterator();
 
-          while (inputsIter.hasNext() && labelsIter.hasNext() ){
-              writingList.add(new Text(inputsIter.next().toString() +""))
-              recordWriter.write();
-        }
+        //Writing of CSV file
+          for (int i=0; i<newInputs.size(); i++){
+              for (int j=0; j<batchSize ;j++){
+              writingList.add(new Text(newInputs.get(i).getRow(j) +","+normLabelsTest.get(i).getRow(j)));
+              }
+          }
+
+        recordWriter.write(writingList);
+
+/*
 
         //Inizializing classifier
         MultiLayerConfiguration classifierConfig = new NeuralNetConfiguration.Builder()
