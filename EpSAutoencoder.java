@@ -34,6 +34,7 @@ import org.nd4j.linalg.api.buffer.DataBuffer;
 import org.nd4j.linalg.api.buffer.DataType;
 import org.nd4j.linalg.api.iter.INDArrayIterator;
 import org.nd4j.linalg.api.ndarray.INDArray;
+import org.nd4j.linalg.api.ops.impl.transforms.strict.LogSigmoid;
 import org.nd4j.linalg.api.shape.LongShapeDescriptor;
 import org.nd4j.linalg.cpu.nativecpu.NDArray;
 import org.nd4j.linalg.dataset.DataSet;
@@ -47,6 +48,7 @@ import org.nd4j.linalg.indexing.INDArrayIndex;
 import org.nd4j.linalg.indexing.IntervalIndex;
 import org.nd4j.linalg.indexing.SpecifiedIndex;
 import org.nd4j.linalg.indexing.conditions.Condition;
+import org.nd4j.linalg.indexing.conditions.GreaterThan;
 import org.nd4j.linalg.learning.config.AdaGrad;
 import org.nd4j.linalg.lossfunctions.LossFunctions;
 import org.nd4j.linalg.string.NDArrayStrings;
@@ -58,6 +60,7 @@ import java.io.File;
 import java.io.IOException;
 import java.nio.LongBuffer;
 import java.util.*;
+import java.util.function.Predicate;
 
 public class EpSAutoencoder {
 
@@ -238,8 +241,8 @@ public class EpSAutoencoder {
                 .build())
             .layer(new DenseLayer.Builder().nIn(16).nOut(8)
                 .build())
-            .layer(new OutputLayer.Builder().nIn(8).nOut(5)
-                .activation(Activation.SOFTMAX)
+            .layer(new OutputLayer.Builder().nIn(8).nOut(1)
+                .activation(Activation.SIGMOID)
                 .lossFunction(LossFunctions.LossFunction.NEGATIVELOGLIKELIHOOD)
                 .build()).validateOutputLayerConfig(false)
             .build();
@@ -251,30 +254,31 @@ public class EpSAutoencoder {
 
             List<INDArray> int_labelsTraining = new ArrayList<>();
             for (int i=0; i<labelsTrain2.size(); i++) {
-                INDArray int_labelsTrain = Nd4j.create(0, 1).castTo(DataType.INT64);
-                int_labelsTrain = Nd4j.argMax(labelsTrain2.get(i), 1).reshape(Nd4j.argMax(labelsTrain2.get(i), 1).shape()[0], 1);
-                INDArrayIndex index = new SpecifiedIndex();
-                index.init(0,int_labelsTrain.size(0));
-
-
-               for (int j=0; j < int_labelsTrain.size(0); j++){
-                   if (int_labelsTrain.get(index).equals(0) == false) {
-                       int_labelsTrain.put(j,1,1);
-                   }
+                INDArray temp = Nd4j.argMax(labelsTrain2.get(i), 1);
+                INDArray temp2 = Nd4j.zeros(temp.shape());
+                for (int j = 0; j < temp.size(0); j++) {
+                    boolean answer = temp.getFloat(j)>3;
+                    temp2.putScalar(j,answer?1:0);
                 }
-                int_labelsTraining.add(int_labelsTrain);
+                int_labelsTraining.add(temp2);
             }
+
 
             List<INDArray> int_labelsTesting = new ArrayList<>();
             for (int i=0; i<labelsTest2.size(); i++) {
-                INDArray int_labelsTest = Nd4j.create(0, 1).castTo(DataType.INT64);
-                int_labelsTest = Nd4j.argMax(labelsTest2.get(i), 1).reshape(Nd4j.argMax(labelsTest2.get(i), 1).shape()[0], 1);
-                int_labelsTesting.add(int_labelsTest);
+                INDArray temp = Nd4j.argMax(labelsTest2.get(i), 1);
+                INDArray temp2 = Nd4j.zeros(temp.shape());
+                for (int j = 0; j < temp.size(0); j++) {
+                    boolean answer = temp.getFloat(j)>3;
+                    temp2.putScalar(j,answer?1:0);
+                }
+                int_labelsTesting.add(temp2);
+
             }
 
 
 
-            int nEpochs2 = 1;
+            int nEpochs2 = 15;
 
             for (int epoch=0; epoch< nEpochs2; epoch++){
                 for(int i=0; i<featuresTrain2.size(); i++){
@@ -284,7 +288,7 @@ public class EpSAutoencoder {
         }
 
             for (int i=0; i<featuresTest2.size(); i++) {
-                Evaluation eval = new Evaluation(5);
+                Evaluation eval = new Evaluation(2);
                 INDArray output = classifier.output(featuresTest2.get(i));
                 eval.eval(int_labelsTesting.get(i),output );
                 log.info(eval.stats());
